@@ -74,6 +74,27 @@ http://localhost:3000/<org>/<dataset>/0
 
 If you prefer HuggingFace-style paths, mirror your dataset under `resolve/main` and set `DATASET_URL_LAYOUT=hf` (or omit it for auto-detection).
 
+### Docker (Local Dataset)
+
+Build the image from this repo:
+```bash
+docker build -t lerobot-viz:local .
+```
+
+Run it with your local dataset server:
+```bash
+docker run --network host \
+  -e PORT=7860 \
+  -e DATASET_URL=http://localhost:8000 \
+  -e DATASET_URL_LAYOUT=flat \
+  lerobot-viz:local
+```
+
+Then open:
+```
+http://localhost:7860/<org>/<dataset>/0
+```
+
 ### Environment Variables
 
 - `DATASET_URL`: (optional) Base URL for dataset hosting (defaults to HuggingFace Datasets).
