@@ -44,9 +44,40 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `src/app/page.tsx` or other files in the `src/` directory. The app supports hot-reloading for rapid development.
 
+### Run with a Local Dataset Server
+
+This app can read datasets from a simple HTTP server. The dataset URL can be either HuggingFace-style (`resolve/main/...`) or a flat directory layout.
+
+1) Serve your dataset directory (flat layout):
+```bash
+python3 -m http.server 8000 --directory /path/to/datasets
+```
+
+Your server should expose:
+```
+http://localhost:8000/<org>/<dataset>/meta/info.json
+http://localhost:8000/<org>/<dataset>/data/...
+http://localhost:8000/<org>/<dataset>/videos/...
+```
+
+2) Start the visualizer with the local dataset URL:
+```bash
+DATASET_URL=http://localhost:8000 \
+DATASET_URL_LAYOUT=flat \
+npm run dev
+```
+
+3) Open a dataset episode:
+```
+http://localhost:3000/<org>/<dataset>/0
+```
+
+If you prefer HuggingFace-style paths, mirror your dataset under `resolve/main` and set `DATASET_URL_LAYOUT=hf` (or omit it for auto-detection).
+
 ### Environment Variables
 
 - `DATASET_URL`: (optional) Base URL for dataset hosting (defaults to HuggingFace Datasets).
+- `DATASET_URL_LAYOUT`: (optional) Dataset URL layout: `hf` for HuggingFace-style `resolve/main`, `flat` for direct paths, or `auto` (default).
 
 ## Contributing
 

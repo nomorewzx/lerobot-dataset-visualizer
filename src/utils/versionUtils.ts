@@ -3,6 +3,53 @@
  */
 
 const DATASET_URL = process.env.DATASET_URL || "https://huggingface.co/datasets";
+const DATASET_URL_LAYOUT = (process.env.DATASET_URL_LAYOUT || "auto").toLowerCase();
+
+type DatasetLayout = "hf" | "flat";
+type LayoutPreference = DatasetLayout | "auto";
+
+const datasetLayoutCache = new Map<string, DatasetLayout>();
+
+function getLayoutPreference(): LayoutPreference {
+  if (DATASET_URL_LAYOUT === "flat" || DATASET_URL_LAYOUT === "hf") {
+    return DATASET_URL_LAYOUT as DatasetLayout;
+  }
+  return "auto";
+}
+
+function buildBaseUrl(repoId: string, layout: DatasetLayout): string {
+  if (layout === "flat") {
+    return `${DATASET_URL}/${repoId}`;
+  }
+  return `${DATASET_URL}/${repoId}/resolve/main`;
+}
+
+function buildInfoUrl(repoId: string, layout: DatasetLayout): string {
+  return `${buildBaseUrl(repoId, layout)}/meta/info.json`;
+}
+
+async function fetchWithTimeout(url: string): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+  try {
+    return await fetch(url, {
+      method: "GET",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function resolveDatasetLayout(repoId: string): DatasetLayout {
+  const preference = getLayoutPreference();
+  if (preference !== "auto") {
+    return preference;
+  }
+  return datasetLayoutCache.get(repoId) || "hf";
+}
 
 /**
  * Dataset information structure from info.json
@@ -28,19 +75,25 @@ interface DatasetInfo {
  */
 export async function getDatasetInfo(repoId: string): Promise<DatasetInfo> {
   try {
-    const testUrl = `${DATASET_URL}/${repoId}/resolve/main/meta/info.json`;
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-    
-    const response = await fetch(testUrl, { 
-      method: "GET",
-      cache: "no-store",
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-    
+    const preference = getLayoutPreference();
+    let response: Response | null = null;
+    let layoutUsed: DatasetLayout = "hf";
+
+    if (preference === "flat") {
+      layoutUsed = "flat";
+      response = await fetchWithTimeout(buildInfoUrl(repoId, "flat"));
+    } else if (preference === "hf") {
+      layoutUsed = "hf";
+      response = await fetchWithTimeout(buildInfoUrl(repoId, "hf"));
+    } else {
+      layoutUsed = "hf";
+      response = await fetchWithTimeout(buildInfoUrl(repoId, "hf"));
+      if (response.status === 404) {
+        layoutUsed = "flat";
+        response = await fetchWithTimeout(buildInfoUrl(repoId, "flat"));
+      }
+    }
+
     if (!response.ok) {
       throw new Error(`Failed to fetch dataset info: ${response.status}`);
     }
@@ -52,6 +105,7 @@ export async function getDatasetInfo(repoId: string): Promise<DatasetInfo> {
       throw new Error("Dataset info.json does not have the expected features structure");
     }
     
+    datasetLayoutCache.set(repoId, layoutUsed);
     return data as DatasetInfo;
   } catch (error) {
     if (error instanceof Error) {
@@ -101,6 +155,6 @@ export async function getDatasetVersion(repoId: string): Promise<string> {
 }
 
 export function buildVersionedUrl(repoId: string, version: string, path: string): string {
-  return `${DATASET_URL}/${repoId}/resolve/main/${path}`;
+  const layout = resolveDatasetLayout(repoId);
+  return `${buildBaseUrl(repoId, layout)}/${path}`;
 }
-
